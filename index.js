@@ -6,26 +6,38 @@ var path = require('path'),
     weaver = new Weaver({
         module: path.resolve(__dirname, './server.js')
     }),
-    async = require('async');
+    server = require('./server.js'),
+    async = require('async'),
+    WORK_LENGTH = 200,
+    TASKS_NUM = 20,
+    TX_NUM = 4000,
+    weaverTasks = [],
+    weaverCalls = [],
+    tic;
 
-async.parallel([function (callback) {
+for (var i = 0; i < TASKS_NUM; i++) {
+    weaverTasks.push({
+        args: WORK_LENGTH
+    });
+}
 
-    weaver.parallel([{
-        args: ['hello', 'world', '!']
-    }, {
-        args: ['hello', 'jacques', '!']
-    }], callback);
-}, function (callback) {
+for (i = 0; i < TX_NUM; i++) {
+    weaverCalls.push(function (callback) {
 
-    weaver.parallel([{
-        args: ['hello', 'waw', '!']
-    }, {
-        args: ['hello', 'pierre', '!']
-    }], callback);
-}], function (err, result) {
+        weaver.roundRobin(weaverTasks, function (err, results) {
+            callback(results);
+        });
+    });
+}
 
-    console.log('[index.js:29] DONE: ' + JSON.stringify(result, null, 4));
+tic = Date.now();
+for (var j = 0; j < TASKS_NUM * TX_NUM; j++) {
+    server(WORK_LENGTH);
+}
+console.log('[index.js:33] sync time: ' + (Date.now() - tic));
+
+tic = Date.now();
+async.parallel(weaverCalls, function (err, res) {
+    console.log('[index.js:48] weaver time: ' + (Date.now() - tic));
     weaver.kill();
 });
-
-
