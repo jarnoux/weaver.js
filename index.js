@@ -8,11 +8,13 @@ var path = require('path'),
     }),
     server = require('./server.js'),
     async = require('async'),
-    WORK_LENGTH = 200,
-    TASKS_NUM = 20,
-    TX_NUM = 4000,
+    WORK_LENGTH = 40,
+    TASKS_NUM = 2000,
+    TX_NUM = 10,
     weaverTasks = [],
-    weaverCalls = [],
+    weaverFirstFreeCalls = [],
+    weaverRoundRobinCalls = [],
+    syncCalls = [],
     tic;
 
 for (var i = 0; i < TASKS_NUM; i++) {
@@ -22,22 +24,39 @@ for (var i = 0; i < TASKS_NUM; i++) {
 }
 
 for (i = 0; i < TX_NUM; i++) {
-    weaverCalls.push(function (callback) {
+    weaverFirstFreeCalls.push(function (callback) {
 
-        weaver.roundRobin(weaverTasks, function (err, results) {
-            callback(results);
-        });
+        weaver.firstFree(weaverTasks, callback);
+    });
+}
+for (i = 0; i < TX_NUM; i++) {
+    weaverRoundRobinCalls.push(function (callback) {
+
+        weaver.roundRobin(weaverTasks, callback);
     });
 }
 
-tic = Date.now();
-for (var j = 0; j < TASKS_NUM * TX_NUM; j++) {
-    server(WORK_LENGTH);
+for (i = 0; i < TASKS_NUM * TX_NUM; i++) {
+    syncCalls.push(server.bind(null, WORK_LENGTH));
 }
-console.log('[index.js:33] sync time: ' + (Date.now() - tic));
+async.parallel(syncCalls, function (err, res) {
 
-tic = Date.now();
-async.parallel(weaverCalls, function (err, res) {
-    console.log('[index.js:48] weaver time: ' + (Date.now() - tic));
-    weaver.kill();
+    tic = Date.now();
+    async.parallel(syncCalls, function (err, res) {
+
+        console.log('[index.js:33] sync time: ' + (Date.now() - tic));
+
+        tic = Date.now();
+            async.parallel(weaverRoundRobinCalls, function (err, res) {
+
+            console.log('[index.js:48] weaver first time: ' + (Date.now() - tic));
+            
+            tic = Date.now();
+            async.parallel(weaverFirstFreeCalls, function (err, res) {
+
+                console.log('[index.js:48] weaver second time: ' + (Date.now() - tic));
+                weaver.kill();
+            });
+        });
+    });
 });
